@@ -21,6 +21,7 @@ import com.hazelcast.jet.config.InstanceConfig;
 import com.hazelcast.jet.config.JetConfig;
 import com.hazelcast.jet.core.DAG;
 import com.hazelcast.jet.core.Vertex;
+import com.hazelcast.jet.core.processor.Processors;
 
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
@@ -30,6 +31,7 @@ import java.io.InputStreamReader;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
@@ -178,19 +180,29 @@ public class WordCountCoreApi {
         new WordCountCoreApi().go();
     }
 
-    private void go() throws Exception {
+    private void go() {
         try {
             setup();
-            System.out.print("\nCounting words... ");
-            long start = System.nanoTime();
+            System.out.println("Warming up");
             jet.newJob(buildDag()).join();
-            System.out.print("done in " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) + " milliseconds.");
-            printResults();
-            IMap<String, Long> counts = jet.getMap(COUNTS);
-            if (counts.get("the") != 951_129) {
-                throw new AssertionError("Wrong count of 'the'");
+            jet.newJob(buildDag()).join();
+            System.out.print("\n\nUsing Kotlin? " + Processors.USE_KOTLIN_TASKLET);
+            int nIters = 20;
+            long[] timings = new long[nIters];
+            for (int i = 0; i < nIters; i++) {
+                System.out.print("\nCounting words... ");
+                long start = System.nanoTime();
+                jet.newJob(buildDag()).join();
+                long took = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+                timings[i] = took;
+                System.out.print("done in " + took + " milliseconds.");
+                IMap<String, Long> counts = jet.getMap(COUNTS);
+                if (counts.get("the") != 951_129) {
+                    throw new AssertionError("Wrong count of 'the'");
+                }
+                counts.clear();
             }
-            System.out.println("Count of 'the' is valid");
+            System.out.println(Arrays.stream(timings).summaryStatistics());
         } finally {
             Jet.shutdownAll();
         }
@@ -203,8 +215,8 @@ public class WordCountCoreApi {
 
         System.out.println("Creating Jet instance 1");
         jet = Jet.newJetInstance(cfg);
-        System.out.println("Creating Jet instance 2");
-        Jet.newJetInstance(cfg);
+//        System.out.println("Creating Jet instance 2");
+//        Jet.newJetInstance(cfg);
         System.out.println("These books will be analyzed:");
         final IMap<Long, String> docId2Name = jet.getMap(DOCID_NAME);
         final long[] docId = {0};

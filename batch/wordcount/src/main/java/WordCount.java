@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.IMap;
 import com.hazelcast.jet.Jet;
 import com.hazelcast.jet.JetInstance;
 import com.hazelcast.jet.Pipeline;
 import com.hazelcast.jet.Sinks;
 import com.hazelcast.jet.Sources;
-import com.hazelcast.jet.config.InstanceConfig;
 import com.hazelcast.jet.config.JetConfig;
 
 import java.io.IOException;
@@ -72,7 +74,7 @@ public class WordCount {
     /**
      * This code illustrates a few more things about Jet, new in 0.5. See comments.
      */
-    private void go() throws Exception {
+    private void go() {
         try {
             setup();
             System.out.print("\nCounting words... ");
@@ -92,10 +94,19 @@ public class WordCount {
     }
 
     private void setup() {
-        JetConfig cfg = new JetConfig();
-        cfg.setInstanceConfig(new InstanceConfig().setCooperativeThreadCount(
-                Math.max(1, getRuntime().availableProcessors() / 2)));
+        System.setProperty("java.net.preferIPv4Stack", "true");
         System.out.println("Creating Jet instance 1");
+
+        JetConfig cfg = new JetConfig();
+        cfg.getInstanceConfig().setCooperativeThreadCount(
+                Math.max(1, getRuntime().availableProcessors() / 2));
+        JoinConfig join = cfg.getHazelcastConfig().getNetworkConfig().getJoin();
+        join.getMulticastConfig().setEnabled(false);
+        TcpIpConfig tcp = join.getTcpIpConfig();
+        tcp.setEnabled(true);
+        tcp.addMember("127.0.0.1:5071");
+        tcp.addMember("127.0.0.1:5072");
+
         jet = Jet.newJetInstance(cfg);
         System.out.println("Creating Jet instance 2");
         Jet.newJetInstance(cfg);
@@ -103,7 +114,11 @@ public class WordCount {
         try {
             IMap<Long, String> bookLines = jet.getMap(BOOK_LINES);
             long[] lineNum = {0};
-            Path book = Paths.get(getClass().getResource("books/shakespeare-complete-works.txt").toURI());
+            Path book = Paths.get(getClass().getResource(
+//                    "books/through-the-looking-glass.txt"
+                    "books/shakespeare-complete-works.txt"
+//                    "stopwords.txt"
+            ).toURI());
             Files.lines(book).forEach(line -> bookLines.put(++lineNum[0], line));
         } catch (IOException | URISyntaxException e) {
             throw new RuntimeException(e);

@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.SerializerConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.jet.Jet;
 import com.hazelcast.jet.JetInstance;
 import com.hazelcast.jet.accumulator.LinTrendAccumulator;
@@ -45,6 +47,7 @@ import static com.hazelcast.jet.core.processor.Processors.accumulateByFrameP;
 import static com.hazelcast.jet.core.processor.Processors.combineToSlidingWindowP;
 import static com.hazelcast.jet.core.processor.Processors.insertWatermarksP;
 import static com.hazelcast.jet.function.DistributedFunctions.constantKey;
+import static java.lang.Runtime.getRuntime;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static trades.operations.TopNOperation.topNOperation;
 import static trades.tradegenerator.GenerateTradesP.TICKER_MAP_NAME;
@@ -135,6 +138,14 @@ public class TopNStocks {
                 .setTypeClass(PriorityQueue.class);
         JetConfig config = new JetConfig();
         config.getHazelcastConfig().getSerializationConfig().addSerializerConfig(serializerConfig);
+        config.getInstanceConfig().setCooperativeThreadCount(
+                Math.max(1, getRuntime().availableProcessors() / 2));
+        JoinConfig join = config.getHazelcastConfig().getNetworkConfig().getJoin();
+        join.getMulticastConfig().setEnabled(false);
+        TcpIpConfig tcp = join.getTcpIpConfig();
+        tcp.setEnabled(true);
+        tcp.addMember("127.0.0.1:5071");
+        tcp.addMember("127.0.0.1:5072");
 
         JetInstance jet = Jet.newJetInstance(config);
         Jet.newJetInstance(config);

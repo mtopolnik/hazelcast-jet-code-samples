@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.IList;
 import com.hazelcast.core.IMap;
 import com.hazelcast.jet.CoGroupBuilder;
@@ -24,6 +26,7 @@ import com.hazelcast.jet.Pipeline;
 import com.hazelcast.jet.Sinks;
 import com.hazelcast.jet.Sources;
 import com.hazelcast.jet.aggregate.AggregateOperation;
+import com.hazelcast.jet.config.JetConfig;
 import com.hazelcast.jet.datamodel.BagsByTag;
 import com.hazelcast.jet.datamodel.Tag;
 import com.hazelcast.jet.datamodel.ThreeBags;
@@ -38,6 +41,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+
+import static java.lang.Runtime.getRuntime;
 
 /**
  * Demonstrates the usage of Pipeline API's co-group transformation, which
@@ -126,12 +131,23 @@ public final class CoGroup {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("hazelcast.logging.type", "log4j");
-        JetInstance jet = Jet.newJetInstance();
-        Jet.newJetInstance();
+
+        JetConfig cfg = new JetConfig();
+        cfg.getInstanceConfig().setCooperativeThreadCount(
+                Math.max(1, getRuntime().availableProcessors() / 2));
+        JoinConfig join = cfg.getHazelcastConfig().getNetworkConfig().getJoin();
+        join.getMulticastConfig().setEnabled(false);
+        TcpIpConfig tcp = join.getTcpIpConfig();
+        tcp.setEnabled(true);
+        tcp.addMember("127.0.0.1:5071");
+        tcp.addMember("127.0.0.1:5072");
+
+        JetInstance jet = Jet.newJetInstance(cfg);
+        Jet.newJetInstance(cfg);
         new CoGroup(jet).go();
     }
 
-    private void go() throws Exception {
+    private void go() {
         prepareSampleData();
         try {
             jet.newJob(coGroupDirect()).join();

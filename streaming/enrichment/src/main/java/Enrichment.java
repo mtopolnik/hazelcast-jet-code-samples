@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.IMap;
 import com.hazelcast.jet.ComputeStage;
 import com.hazelcast.jet.HashJoinBuilder;
@@ -41,6 +43,7 @@ import static com.hazelcast.jet.JoinClause.joinMapEntries;
 import static com.hazelcast.jet.JournalInitialPosition.START_FROM_CURRENT;
 import static com.hazelcast.jet.core.WatermarkGenerationParams.noWatermarks;
 import static com.hazelcast.jet.function.DistributedFunctions.entryValue;
+import static java.lang.Runtime.getRuntime;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -134,6 +137,15 @@ public final class Enrichment {
 
         JetConfig cfg = new JetConfig();
         cfg.getHazelcastConfig().getMapEventJournalConfig(TRADES).setEnabled(true);
+        cfg.getInstanceConfig().setCooperativeThreadCount(
+                Math.max(1, getRuntime().availableProcessors() / 2));
+        JoinConfig join = cfg.getHazelcastConfig().getNetworkConfig().getJoin();
+        join.getMulticastConfig().setEnabled(false);
+        TcpIpConfig tcp = join.getTcpIpConfig();
+        tcp.setEnabled(true);
+        tcp.addMember("127.0.0.1:5071");
+        tcp.addMember("127.0.0.1:5072");
+
         JetInstance jet = Jet.newJetInstance(cfg);
         Jet.newJetInstance(cfg);
 
